@@ -8,7 +8,7 @@ void EditorSession::handle_editor_command(EditorCommand command) {
     std::cout << "record/apply loop\n";
 
     for (const auto& action: actions) {
-        apply_operation(action);
+        apply_operation(action, true);
         outgoing_queue.push(action);
     }
     if (command.get_type() != MoveUp && command.get_type() != MoveDown) {
@@ -28,6 +28,7 @@ std::vector<Operation> EditorSession::take_outgoing_operations() {
 }
 
 void EditorSession::receive_cursor_update(const std::string& client_id, const ElementID& position) {
+    std::cout << "STORING REMOTE CURSOR: " << client_id << " -> " << position.to_String() << '\n';
     remote_cursors.insert_or_assign(client_id, position);
     //remote_cursors[client_id] = position;
 }
@@ -45,27 +46,38 @@ void EditorSession::flush_incoming() {
 
 void EditorSession::apply_history(const std::vector<Operation>& history){
     for(const auto& op : history) {
-        apply_operation(op);
+        apply_operation(op, false);
     }
 }
 
 void EditorSession::apply(Message message) {
-    if (message.get_type() == MessageType::OPERATION) {
-        const Operation& oper = std::get<Operation>(message.get_payload());
 
-        std::visit([&](auto const& op) {
-            using T = std::decay_t<decltype(op)>;
-            if constexpr (std::is_same_v<T, InsertOperation>) {
-                gen.sync_clock(op.get_id().get_lamport());
-            }
-        }, oper);
+    switch (message.get_type()) {
+        case MessageType::OPERATION: {
+            const Operation& oper = std::get<Operation>(message.get_payload());
 
-        apply_operation(oper);
+            std::visit([&](auto const& op) {
+                using T = std::decay_t<decltype(op)>;
+                if constexpr (std::is_same_v<T, InsertOperation>) {
+                    gen.sync_clock(op.get_id().get_lamport());
+                }
+            }, oper);
+
+            apply_operation(oper, false);
+        }
+        // case MessageType::CURSOR_UPDATE: {
+        //     const CursorUpdate& update = std::get<CursorUpdate>(message.get_payload());
+
+        //     receive_cursor_update(message.get_sender(), update.position);
+        //     break;
+        // }
+        default:
+            break;
     }
 }
 
 
-void EditorSession::apply_operation(const Operation& oper) {
+void EditorSession::apply_operation(const Operation& oper, bool update_cursor) {
     std::string serialized = operation_serializer::serialize(oper);
 
     if (!applied_operations.insert(serialized).second) {
@@ -76,7 +88,9 @@ void EditorSession::apply_operation(const Operation& oper) {
     log.record(oper);
     doc.apply(oper);
 
-    cursor.update(doc, oper);
+    if (update_cursor) {
+        cursor.update(doc, oper);
+    }
 
     update_remote_cursors(oper);
 }

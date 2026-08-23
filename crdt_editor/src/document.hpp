@@ -32,6 +32,7 @@ public:
     std::unordered_map<ElementID, Character> get_elements() const;
     std::pair<size_t, size_t> clamp_position(size_t requested_line, size_t requested_column) const;
     size_t get_line_count() const;
+    size_t get_max_line_length() const;
     Document();
 
 private:

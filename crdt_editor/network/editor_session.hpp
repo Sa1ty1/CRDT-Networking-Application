@@ -21,7 +21,7 @@ public:
 
     void apply(Message message);
 
-    void apply_operation(const Operation& oper);
+    void apply_operation(const Operation& oper, bool update_cursor = false);
 
     void apply_history(const std::vector<Operation>& history);
 

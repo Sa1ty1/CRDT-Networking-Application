@@ -33,6 +33,7 @@ add_executable(main
     crdt_editor/UI/editor_widget.cpp
     crdt_editor/tests/UI_tests.cpp
     crdt_editor/tests/CRDT_tests.cpp
+    crdt_editor/UI/viewport.cpp
 )
 
 target_include_directories(main PRIVATE

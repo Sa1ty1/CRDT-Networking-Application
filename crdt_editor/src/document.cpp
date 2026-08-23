@@ -314,6 +314,24 @@ std::pair<size_t, size_t> Document::get_cursor_position(const ElementID& anchor)
     return {line, column + 1};
 }
 
+size_t Document::get_max_line_length() const {
+    size_t max_length = 0;
+    size_t current_length = 0;
+
+    visit_visible(ROOT_ID, [&](const ElementID& id) {
+        char c = elements.at(id).get_char();
+        if (c == '\n') {
+            max_length = std::max(max_length, current_length);
+            current_length = 0;
+        } else {
+            ++current_length;
+        }
+    });
+    max_length = std::max(max_length, current_length);
+
+    return max_length;
+}
+
 
 std::pair<size_t, size_t> Document::clamp_position(size_t requested_line, size_t requested_column) const {
     size_t line_count = get_line_count();

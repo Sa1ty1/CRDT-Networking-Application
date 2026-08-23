@@ -249,6 +249,7 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
 
                 Message complete(MessageType::SYNC_COMPLETE, client_id, std::monostate{});
                 send_message(complete.serialize());
+                send_cursor_update(session.get_cursor().get_anchor());
                 break;
             }
             case MessageType::HELLO: {
@@ -280,5 +281,4 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
         std::cerr << "Invalid message from server: " << e.what() << std::endl;
         disconnect();
     }
-    
 }
