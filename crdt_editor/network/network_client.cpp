@@ -219,7 +219,6 @@ void NetworkClient::start_write() {
     );
 }
 
-// void process_outgoing();
 void NetworkClient::handle_message(const std::string& serialized_message) {
     std::cout << "Received: " << serialized_message << std::endl; // temporarily removing the rest so that testing doesn't fail
     

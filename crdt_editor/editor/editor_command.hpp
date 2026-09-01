@@ -1,7 +1,8 @@
 #pragma once
 #include <iostream>
 
-enum CommandType {InsertCharacter, MoveLeft, MoveRight, MoveUp, MoveDown, Backspace, DeleteForward, Enter};
+enum CommandType {InsertCharacter, MoveLeft, MoveRight, MoveUp, MoveDown, Backspace, DeleteForward, Enter,
+                    ShiftLeft, ShiftRight, ShiftUp, ShiftDown};
 
 class EditorCommand {
 public:

@@ -40,6 +40,7 @@ void EditorWidget::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     QFontMetrics metrics(font());
 
+    draw_selection(painter, metrics);
     draw_document(painter, metrics);
     draw_remote_cursors(painter, metrics);
     draw_local_cursor(painter, metrics);
@@ -49,18 +50,24 @@ void EditorWidget::keyPressEvent(QKeyEvent* event) {
 
     std::cout << "Qt key = " << event->key() << ", text = [" << event->text().toStdString() << "]\n";
 
+    bool shift = event->modifiers() & Qt::ShiftModifier;
+
     switch(event->key()) {
         case Qt::Key_Left:
-            session.handle_editor_command(EditorCommand(MoveLeft));
+            session.handle_editor_command(EditorCommand(
+                shift ? ShiftLeft : MoveLeft));
             break;
         case Qt::Key_Right:
-            session.handle_editor_command(EditorCommand(MoveRight));
+            session.handle_editor_command(EditorCommand(
+                shift ? ShiftRight : MoveRight));
             break;
         case Qt::Key_Up:
-            session.handle_editor_command(EditorCommand(MoveUp));
+            session.handle_editor_command(EditorCommand(
+                shift ? ShiftUp : MoveUp));
             break;
         case Qt::Key_Down:
-            session.handle_editor_command(EditorCommand(MoveDown));
+            session.handle_editor_command(EditorCommand(
+                shift ? ShiftDown: MoveDown));
             break;
         case Qt::Key_Backspace:
             session.handle_editor_command(EditorCommand(Backspace));
@@ -114,11 +121,15 @@ void EditorWidget::mousePressEvent(QMouseEvent* event) {
     auto anchor = session.get_doc().get_anchor_at(line, column);
 
     if (anchor) {
-        session.get_cursor().set_position(*anchor, session.get_doc());
+        auto& cursor = session.get_cursor();
+        cursor.set_position(*anchor, session.get_doc());
+        //cursor.start_selection();
+        selecting = true;
         send_cursor_update();
+        reset_cursor_blink();
+        ensure_cursor_visible();
     }
 
-    reset_cursor_blink();
     event->accept();
     update();
 }
@@ -141,6 +152,34 @@ void EditorWidget::resizeEvent(QResizeEvent* event) {
     clamp_viewport();
     ensure_cursor_visible();
 }
+
+void EditorWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (!selecting) {
+        return;
+    }
+    auto [requested_line, requested_column] = screen_to_document_position(event->position().toPoint());
+    auto [line, column] = session.get_doc().clamp_position(requested_line, requested_column);
+    auto anchor = session.get_doc().get_anchor_at(line, column);
+
+    if (anchor) {
+        if (!session.get_cursor().has_selection()) {
+            session.get_cursor().start_selection();
+        }
+        session.get_cursor().set_anchor(*anchor);
+        reset_cursor_blink();
+        ensure_cursor_visible();
+        update();
+    }
+    event->accept();
+}
+
+void EditorWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        selecting = false;
+    }
+    event->accept();
+}
+
 
 std::pair<size_t, size_t> EditorWidget::screen_to_document_position(QPoint position) const {
     QFontMetrics metrics(font());
@@ -210,7 +249,11 @@ void EditorWidget::draw_local_cursor(QPainter& painter, const QFontMetrics& metr
     if (!cursor_visible) {
         return;
     }
-    auto [line, col] = session.get_doc().get_cursor_position(session.get_cursor().get_anchor());
+    const ElementID& anchor = session.get_cursor().get_anchor();
+    if (anchor != ROOT_ID && session.get_doc().get_elements().contains(anchor) && session.get_doc().get_character(anchor)) {
+        // what am I doing here
+    }
+    auto [line, col] = session.get_doc().get_cursor_position(anchor);
     //auto [line, col] = session.get_cursor().get_line_column(session.get_doc());
     QPoint position = document_to_screen(line, col);
 
@@ -226,8 +269,16 @@ void EditorWidget::draw_remote_cursors(QPainter& painter, const QFontMetrics& me
 
     for (const auto& [client_id, anchor] : session.get_remote_cursors()) {
         
+          //std::cout << "Rendering remote cursor " << client_id << " at " << anchor.to_String() << '\n';
+
         try {
-            auto [line, col] = session.get_doc().get_cursor_position(anchor);
+            auto resolved = session.get_doc().resolve_cursor_anchor(anchor);
+            if (!resolved) {
+                std::cerr << "Cannot resolve remote cursor " << client_id << " at " << anchor.to_String() << '\n';
+                continue;
+            }
+            auto [line, col] = session.get_doc().get_cursor_position(*resolved);
+            // auto [line, col] = session.get_doc().get_cursor_position(anchor);
             QPoint screen_position = document_to_screen(line, col);
 
             painter.setPen(cursor_color(client_id));
@@ -239,7 +290,7 @@ void EditorWidget::draw_remote_cursors(QPainter& painter, const QFontMetrics& me
             painter.setPen(Qt::white);
             painter.drawText(label_rect, Qt::AlignCenter, label);
         } catch (const std::runtime_error& e) {
-             std::cerr << "Failed to render remote cursor for " << client_id << ": " << e.what() << '\n';
+            std::cerr << "Failed to render remote cursor for " << client_id << ": " << e.what() << '\n';
             // Remote cursor references an element we don't have
             continue; // this should prevent crashing from this issue that probably shouldnt crash everything
         }
@@ -294,4 +345,25 @@ void EditorWidget::clamp_viewport() {
     size_t document_columns = session.get_doc().get_max_line_length();
 
     viewport.clamp(document_lines, visible_lines, document_columns, visible_columns);
+}
+
+
+void EditorWidget::draw_selection(QPainter& painter, const QFontMetrics& metrics) {
+    auto range = session.get_cursor().normalized_range(session.get_doc());
+    if (!range) {
+        return;
+    }
+    auto selected = session.get_doc().get_visible_range(*range);
+    int char_width = metrics.horizontalAdvance('M');
+    int line_height = metrics.height();
+
+    for (const auto& id : selected) {
+        char c = session.get_doc().get_character(id);
+        if (c == '\n') {
+            continue;
+        }
+        auto [line, column] = session.get_doc().get_cursor_position(session.get_doc().visible_predecessor(id));
+        QPoint position = document_to_screen(line, column);
+        painter.fillRect(position.x(), position.y(), char_width, line_height, selection_color);
+    }
 }

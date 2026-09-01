@@ -10,9 +10,9 @@ public:
 
     std::vector<Operation> insert_character(char c);
 
-    std::vector<Operation> move_left();
+    std::vector<Operation> move_left_impl();
 
-    std::vector<Operation> move_right();
+    std::vector<Operation> move_right_impl();
 
     std::vector<Operation> backspace();
 
@@ -20,9 +20,27 @@ public:
 
     std::vector<Operation> newline();
 
+    std::vector<Operation> move_up_impl();
+
+    std::vector<Operation> move_down_impl();
+
+    std::vector<Operation> move_left();
+
+    std::vector<Operation> move_right();
+
     std::vector<Operation> move_up();
 
     std::vector<Operation> move_down();
+
+    std::vector<Operation> shift_left();
+
+    std::vector<Operation> shift_right();
+
+    std::vector<Operation> shift_up();
+
+    std::vector<Operation> shift_down();
+
+    std::vector<Operation> delete_selection();
 
     std::vector<Operation> process_command(EditorCommand command);
 

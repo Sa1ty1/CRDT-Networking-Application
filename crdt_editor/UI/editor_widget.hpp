@@ -18,6 +18,10 @@ struct CursorStyle {
     QColor color;
 };
 
+struct Selection {
+    ElementID anchor;
+    ElementID cursor;
+};
 
 class EditorWidget : public QWidget {
 public:
@@ -29,6 +33,9 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+
     QColor cursor_color(const std::string& client_id);
     QPoint document_to_screen(size_t line, size_t column) const;
 
@@ -41,6 +48,8 @@ private:
     bool cursor_visible = true;
     NetworkClient& network;
     Viewport viewport;
+    bool selecting = false;
+    QColor selection_color = QColor(50, 100, 180);
     std::pair<size_t, size_t> screen_to_document_position(QPoint position) const;
     void draw_document(QPainter& painter, const QFontMetrics& metrics);
     void draw_local_cursor(QPainter& painter, const QFontMetrics& metrics);
@@ -49,4 +58,5 @@ private:
     void reset_cursor_blink();
     void ensure_cursor_visible();
     void clamp_viewport();
+    void draw_selection(QPainter& painter, const QFontMetrics& metrics);
 };

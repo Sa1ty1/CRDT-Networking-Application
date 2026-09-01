@@ -87,7 +87,7 @@ void Document::apply(const Operation& op) {
     }, op); 
 }
 
-std::optional<ElementID> Document::visible_successor(const ElementID node) const {
+std::optional<ElementID> Document::visible_successor(const ElementID& node) const {
     auto next = successor(node);
     while (next && elements.at(*next).get_deleted()) {
         next = successor(*next);
@@ -122,12 +122,15 @@ std::optional<ElementID> Document::successor(const ElementID node) const { //may
     return std::nullopt;
 }
 
-const ElementID Document::visible_predecessor(const ElementID node) const {
+const ElementID Document::visible_predecessor(const ElementID& node) const {
     if (node == ROOT_ID) {
         return ROOT_ID;
     }
     ElementID last = predecessor(node);
-    while (elements.at(last).get_deleted()) {
+    // while (elements.at(last).get_deleted()) {
+    //     last = predecessor(last);
+    // }
+    while (last != ROOT_ID && elements.at(last).get_deleted()) {
         last = predecessor(last);
     }
     return last;
@@ -137,22 +140,22 @@ const ElementID Document::predecessor(const ElementID node) const {
     ElementID parent = parent_of.at(node);
     const auto& siblings = children.at(parent);
     // I think always has at least one "sibling" since it exists
-    int id = 0;
-    while (id < siblings.size()) {
-        if (id == siblings.size()) {
-            throw std::runtime_error("Node not found among parent's children.");
-        }
-        if (siblings.at(id) == node) {
-            break;
-        }
-        id++;
+    size_t index = 0;
+    while (index < siblings.size() && siblings[index] != node) {
+        ++index;
     }
 
-    if (siblings.at(0) == node) {
+    if (index == siblings.size()) {
+        throw std::runtime_error(
+            "Node not found among parent's children."
+        );
+    }
+
+    if (index == 0) {
         return parent;
     }
 
-    ElementID previous = siblings.at(id-1);
+    ElementID previous = siblings[index - 1];
 
     while(children.at(previous).size() > 0) {
         previous = children.at(previous).at(children.at(previous).size()-1);
@@ -302,10 +305,67 @@ std::optional<size_t> Document::get_line_length(size_t target_line) const {
     return std::nullopt;
 }
 
+std::optional<ElementID> Document::resolve_cursor_anchor(const ElementID& anchor) const {
+    if (anchor == ROOT_ID) {
+        return ROOT_ID;
+    }
+    if (!elements.contains(anchor)) {
+        std::cerr << "resolve_cursor_anchor: missing anchor "
+                  << anchor.to_String() << '\n';
+        return std::nullopt;
+    }
+    if (!elements.at(anchor).get_deleted()) {
+        return anchor;
+    }
+    ElementID resolved = visible_predecessor(anchor);
+    std::cerr << "resolve_cursor_anchor: "
+              << anchor.to_String()
+              << " -> "
+              << resolved.to_String()
+              << '\n';
+
+    if (resolved == ROOT_ID) {
+        return ROOT_ID;
+    }
+
+    if (!elements.contains(resolved)) {
+        std::cerr << "resolve_cursor_anchor: predecessor "
+                  << resolved.to_String()
+                  << " does not exist!\n";
+        return std::nullopt;
+    }
+
+    if (elements.at(resolved).get_deleted()) {
+        std::cerr << "resolve_cursor_anchor: predecessor "
+                  << resolved.to_String()
+                  << " is still deleted!\n";
+        return std::nullopt;
+    }
+    return visible_predecessor(anchor);
+}
+
 std::pair<size_t, size_t> Document::get_cursor_position(const ElementID& anchor) const {
+    if (anchor != ROOT_ID && !elements.contains(anchor)) {
+        std::cerr << "Cursor references missing element: " << anchor.to_String() << '\n';
+        throw std::runtime_error("Element not found");
+    }
+    
     if (anchor == ROOT_ID) {
         return {0, 0};
     }
+
+    if (!elements.contains(anchor)) {
+        std::cerr << "get_cursor_position: missing element "
+                  << anchor.to_String() << '\n';
+        throw std::runtime_error("Element not found");
+    }
+
+    if (elements.at(anchor).get_deleted()) {
+        std::cerr << "get_cursor_position: element is deleted "
+                  << anchor.to_String() << '\n';
+        throw std::runtime_error("Element not found");
+    }
+
     auto [line, column] = get_line_column(anchor);
     char c = get_character(anchor);
     if (c == '\n') {
@@ -357,6 +417,32 @@ size_t Document::get_line_count() const {
     return line;
 }
 
+
+std::vector<ElementID> Document::get_visible_range(const DocumentRange& range) const {
+    std::vector<ElementID> result;
+    if (range.start == range.end) {
+        return result;
+    }
+    bool collecting = (range.start == ROOT_ID);
+
+    visit_visible(ROOT_ID, [&](const ElementID& id) {
+        if (id == range.end) {
+            if (collecting) {
+                result.push_back(id);
+            }
+            collecting = false;
+            return;
+        }
+        if (id == range.start) {
+            collecting = true;
+            return;
+        }
+        if (collecting) {
+            result.push_back(id);
+        }
+    });
+    return result;
+}
 
 
 void Document::applyInsert(const InsertOperation& oper) {

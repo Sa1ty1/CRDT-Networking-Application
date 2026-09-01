@@ -10,6 +10,11 @@
 #include <src/elementID.hpp>
 #include <src/operation.hpp>
 
+struct DocumentRange {
+    ElementID start;
+    ElementID end;
+};
+
 class Document {
 public:
     std::string render();
@@ -18,9 +23,9 @@ public:
     std::string visit_for_testing(const ElementID& node);
     void validate() const;
     void apply(const Operation& op);
-    std::optional<ElementID> visible_successor(const ElementID node) const;
+    std::optional<ElementID> visible_successor(const ElementID& node) const;
     std::optional<ElementID> successor(const ElementID node) const;
-    const ElementID visible_predecessor(const ElementID node) const;
+    const ElementID visible_predecessor(const ElementID& node) const;
     const ElementID predecessor(const ElementID node) const;
 
     std::pair<size_t, size_t> get_line_column(ElementID target) const;
@@ -33,6 +38,9 @@ public:
     std::pair<size_t, size_t> clamp_position(size_t requested_line, size_t requested_column) const;
     size_t get_line_count() const;
     size_t get_max_line_length() const;
+    std::vector<ElementID> get_visible_range(const DocumentRange& range) const;
+    std::optional<ElementID> resolve_cursor_anchor(const ElementID& anchor) const;
+
     Document();
 
 private:
