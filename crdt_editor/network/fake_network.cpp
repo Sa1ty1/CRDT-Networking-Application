@@ -43,7 +43,6 @@ void FakeNetwork::deliver(const std::string& sender, const std::string& mes) {
         std::visit([&](const auto& op) {
             using T = std::decay_t<decltype(op)>;
             if constexpr (std::is_same_v<T, InsertOperation>) {
-                std::cout << "Delivering " << op.get_char() << std::endl;
             }
         }, std::get<Operation>(message.get_payload()));
 

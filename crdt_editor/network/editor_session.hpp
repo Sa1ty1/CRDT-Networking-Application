@@ -29,6 +29,8 @@ public:
 
     void update_remote_cursors(const Operation& oper);
 
+    void update_pending_cursor_updates();
+
     std::string render();
 
     Document& get_doc() const;
@@ -46,6 +48,7 @@ private: // & means its a reference which means something else owns it. Since th
     InputHandler& handler;
     std::queue<Operation> outgoing_queue;
     std::queue<Message> incoming_queue;
+    std::unordered_map<std::string, ElementID> pending_cursor_updates;
     std::unordered_set<std::string> applied_operations;
     std::unordered_map<std::string, ElementID> remote_cursors;
 };

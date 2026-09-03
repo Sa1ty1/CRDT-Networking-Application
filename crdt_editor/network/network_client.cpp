@@ -194,7 +194,6 @@ void NetworkClient::start_read() {
 }
 
 void NetworkClient::start_write() {
-    // std::cout << "start_write queue size = " << write_queue.size() << '\n';
     auto self = shared_from_this();
     const std::uint64_t generation = connection_generation;
 
@@ -220,7 +219,6 @@ void NetworkClient::start_write() {
 }
 
 void NetworkClient::handle_message(const std::string& serialized_message) {
-    std::cout << "Received: " << serialized_message << std::endl; // temporarily removing the rest so that testing doesn't fail
     
     try {
         Message message = Message::deserialize(serialized_message);

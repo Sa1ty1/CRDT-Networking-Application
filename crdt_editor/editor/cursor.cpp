@@ -15,16 +15,12 @@ void Cursor::update_on_insert(const Document& doc, const InsertOperation& oper) 
 
 void Cursor::update_on_delete(const Document& doc, const RemoveOperation& oper) {
     std::cout << "LOCAL CURSOR DELETE UPDATE\n";
-    std::cout << "  cursor before: " << get_anchor().to_String() << '\n';
-    std::cout << "  deleted target: " << oper.get_target().to_String() << '\n';
-    
+
     if (oper.get_target() != get_anchor()) {
-        std::cout << "  cursor unaffected\n";
         return;
     }
 
     ElementID predecessor = doc.visible_predecessor(oper.get_target());
-    std::cout << "  cursor moved to: " << predecessor.to_String() << '\n';
     set_anchor(predecessor);
 }
 

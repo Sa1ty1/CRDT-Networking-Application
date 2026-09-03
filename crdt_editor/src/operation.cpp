@@ -62,7 +62,6 @@ RemoveOperation RemoveOperation::deserialize(const std::string& serialized_eleme
     for (auto&& subrange : split_view) { // the substrings; the later two are the elementID
         tokens.emplace_back(subrange.begin(), subrange.end());
     }
-    std::cout << "serialized_elementID in RemoveOperation: " << serialized_elementID << std::endl;
 
     if (tokens.size() != 2) {
         throw std::invalid_argument("serialized insert operation is incorrect.");

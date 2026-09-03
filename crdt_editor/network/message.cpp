@@ -41,9 +41,9 @@ Message Message::deserialize(const std::string& serialized_message) {
         tokens.emplace_back(subrange.begin(), subrange.end());
     }
 
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        std::cout << "TOKEN " << i << ": [" << tokens[i] << "]\n";
-    }
+    // for (size_t i = 0; i < tokens.size(); ++i) {
+    //     std::cout << "TOKEN " << i << ": [" << tokens[i] << "]\n";
+    // }
 
     MessageType type = message_serializer::deserialize_type(tokens.at(0));
     std::string sender = tokens.at(1);

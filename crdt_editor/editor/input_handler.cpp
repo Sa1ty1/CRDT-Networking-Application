@@ -3,8 +3,6 @@
 std::vector<Operation> InputHandler::insert_character(char c) {
 
     std::cout << "INSERT CURSOR: " << cursor.get_anchor().to_String() << '\n';
-    std::cout << "INSERT CURSOR POSITION: ";
-
 
     cursor.clear_selection();
     ElementID parent = cursor.get_anchor();
@@ -20,7 +18,6 @@ std::vector<Operation> InputHandler::move_left_impl() {
     cursor.set_anchor(doc.visible_predecessor(cursor.get_anchor()));
 
     auto [line, column] = cursor.get_line_column(doc);
-    std::cout << "After Move Cursor in move left: " << line << ", " << column << '\n';
     return {};
 }
 
@@ -32,8 +29,6 @@ std::vector<Operation> InputHandler::move_right_impl() {
     }
     
     auto [line, column] = cursor.get_line_column(doc);
-    std::cout << "After Move Cursor in move right: " << line << ", " << column << '\n';
-
     return {};
 }
 
@@ -74,29 +69,20 @@ std::vector<Operation> InputHandler::move_up_impl() {
     if (!cursor.has_desired_column()) {
         cursor.set_desired_column(column);
     }
-    std::cout << "desired column worked: " << cursor.get_desired_column().value() << std::endl;
 
     size_t target_line = line - 1;
 
     auto length = doc.get_line_length(target_line);
-    if (length.has_value()) {
-        std::cout << "get line length worked: " << length.value() << std::endl;
-    } else {
-        std::cout << "length has no value" << std::endl;
-    }
     
     auto des_col_val = cursor.get_desired_column();
 
     size_t target_column = std::min(*des_col_val, *length);
-    std::cout << "target_column worked: " << target_column << std::endl;
     auto anchor = doc.get_anchor_at(target_line, target_column);
-    std::cout << "get anchor at worked" << std::endl;
 
     if (anchor) {
         cursor.set_anchor(*anchor);
     }
     auto [line1, column1] = cursor.get_line_column(doc);
-    std::cout << "After Move Cursor in move up: " << line1 << ", " << column1 << '\n';
 
     return {};
 }
@@ -128,7 +114,6 @@ std::vector<Operation> InputHandler::move_down_impl() {
     }
 
     auto [line1, column1] = cursor.get_line_column(doc);
-    std::cout << "After Move Cursor in move down: " << line1 << ", " << column1 << '\n';
     return {};
 }
 
@@ -137,21 +122,25 @@ std::vector<Operation> InputHandler::newline() {
 }
 
 std::vector<Operation> InputHandler::move_left() {
+    std::cout << "starting move left" << std::endl;
     cursor.clear_selection();
     return move_left_impl();
 }
 
 std::vector<Operation> InputHandler::move_right() {
+    std::cout << "starting move right" << std::endl;
     cursor.clear_selection();
     return move_right_impl();
 }
 
 std::vector<Operation> InputHandler::move_up() {
+    std::cout << "starting move up" << std::endl;
     cursor.clear_selection();
     return move_up_impl();
 }
 
 std::vector<Operation> InputHandler::move_down() {
+    std::cout << "starting move down" << std::endl;
     cursor.clear_selection();
     return move_down_impl();
 }
@@ -209,7 +198,6 @@ std::vector<Operation> InputHandler::delete_selection() {
 }
 
 std::vector<Operation> InputHandler::process_command(EditorCommand command) {
-    std::cout << "Command = " << command.get_type() << '\n';
     switch (command.get_type())
     {
     case InsertCharacter:

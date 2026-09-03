@@ -2,10 +2,8 @@
 
 
 void EditorSession::handle_editor_command(EditorCommand command) {
-    std::cout << "process_command\n";
     std::cout << "SESSION COMMAND: " << command.get_type() << '\n';
     std::vector<Operation> actions = handler.process_command(command);
-    std::cout << "record/apply loop\n";
 
     for (const auto& action: actions) {
         apply_operation(action, true);
@@ -31,13 +29,12 @@ void EditorSession::receive_cursor_update(const std::string& client_id, const El
     
     auto resolved = doc.resolve_cursor_anchor(position);
     if (!resolved) {
-        std::cout << "  cannot resolve cursor\n";
+        pending_cursor_updates.insert_or_assign(client_id, position);
         return;
     }
-    std::cout << "  resolved to: " << resolved->to_String() << '\n';
-    // std::cout << "STORING REMOTE CURSOR: " << client_id << " -> " << resolved->to_String() << '\n';
     remote_cursors.insert_or_assign(client_id, position);
-    //remote_cursors[client_id] = position;
+    // If this client had an older pending update, this one supersedes it.
+    pending_cursor_updates.erase(client_id);    
 }
 
 void EditorSession::receive_message(Message message) {
@@ -55,6 +52,8 @@ void EditorSession::apply_history(const std::vector<Operation>& history){
     for(const auto& op : history) {
         apply_operation(op, false);
     }
+
+    update_pending_cursor_updates();
 }
 
 void EditorSession::apply(Message message) {
@@ -71,6 +70,8 @@ void EditorSession::apply(Message message) {
             }, oper);
 
             apply_operation(oper, false);
+            update_pending_cursor_updates();
+            break;
         }
         // case MessageType::CURSOR_UPDATE: { // at some point will switch to this; not yet
         //     const CursorUpdate& update = std::get<CursorUpdate>(message.get_payload());
@@ -101,6 +102,7 @@ void EditorSession::apply_operation(const Operation& oper, bool update_cursor) {
     }
 
     update_remote_cursors(oper);
+    //update_pending_cursor_updates();
 }
 
 void EditorSession::update_remote_cursors(const Operation& oper) {
@@ -111,20 +113,31 @@ void EditorSession::update_remote_cursors(const Operation& oper) {
             const ElementID& target = operation.get_target();
 
             std::cout << "REMOTE CURSOR DELETE UPDATE\n";
-            std::cout << "  deleted target: " << target.to_String() << '\n';
 
             for (auto& [client_id, anchor] : remote_cursors) {
-                std::cout << "  " << client_id << " cursor before: " << anchor.to_String() << '\n';
                 
                 if (anchor == target) {
-                    std::cout << "before visible_predecessor in update_remote_cursors (anchor : target): " << anchor.to_String() << " : " << target.to_String() << std::endl;
                     ElementID vis_predecessor = doc.visible_predecessor(target);
-                    std::cout << "  MOVING " << client_id << " -> " << vis_predecessor.to_String() << '\n';
                     anchor = vis_predecessor;
                 }
             }
         }
     }, oper);
+}
+
+void EditorSession::update_pending_cursor_updates() {
+    for (auto it = pending_cursor_updates.begin(); it != pending_cursor_updates.end();) {
+        const std::string& client_id = it->first;
+        const ElementID& position = it->second;
+        auto resolved = doc.resolve_cursor_anchor(position);
+        if (resolved) {
+            std::cout << "RESOLVED PENDING CURSOR: " << client_id << " -> " << position.to_String() << " (resolved to " << resolved->to_String() << ")\n";
+            remote_cursors.insert_or_assign(client_id, position);
+            it = pending_cursor_updates.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 std::string EditorSession::render() {

@@ -48,7 +48,7 @@ void EditorWidget::paintEvent(QPaintEvent* event) {
 
 void EditorWidget::keyPressEvent(QKeyEvent* event) {
 
-    std::cout << "Qt key = " << event->key() << ", text = [" << event->text().toStdString() << "]\n";
+    // std::cout << "Qt key = " << event->key() << ", text = [" << event->text().toStdString() << "]\n";
 
     bool shift = event->modifiers() & Qt::ShiftModifier;
 
@@ -117,7 +117,6 @@ void EditorWidget::mousePressEvent(QMouseEvent* event) {
 
     auto [line, column] = session.get_doc().clamp_position(requested_line, requested_column);
 
-    std::cout << "Clicked: " << line << ", column: " << column << std::endl;
     auto anchor = session.get_doc().get_anchor_at(line, column);
 
     if (anchor) {
@@ -269,8 +268,6 @@ void EditorWidget::draw_remote_cursors(QPainter& painter, const QFontMetrics& me
 
     for (const auto& [client_id, anchor] : session.get_remote_cursors()) {
         
-          //std::cout << "Rendering remote cursor " << client_id << " at " << anchor.to_String() << '\n';
-
         try {
             auto resolved = session.get_doc().resolve_cursor_anchor(anchor);
             if (!resolved) {

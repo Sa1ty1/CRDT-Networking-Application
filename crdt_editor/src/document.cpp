@@ -456,8 +456,6 @@ void Document::applyInsert(const InsertOperation& oper) {
         if (buffered_insert_ids.insert(oper.get_id()).second) { // so don't have duplicate children
             buffered_inserts[oper.get_parent()].push_back(oper);
         }
-        
-        std::cout << "BUFFERED INSERT: " << oper.get_id().to_String() << " waiting for " << oper.get_parent().to_String() << std::endl;
         return;
     }
 
@@ -492,13 +490,6 @@ void Document::applyInsert(const InsertOperation& oper) {
     and the next insertion therefore becomes its child.
     */
     std::sort(siblings.begin(), siblings.end(),[](const ElementID& a, const ElementID& b) {return a > b;});
-    //std::sort(siblings.begin(), siblings.end()) 
-
-    std::cout << "Children of " << oper.get_parent().to_String() << ":\n";
-
-    for (const auto& child : siblings) {
-        std::cout << "  " << child.to_String() << " -> '" << elements.at(child).get_char() << "'\n";
-    }
 
     // find operations waiting for this newly-arrived element
     auto waiting = buffered_inserts.find(oper.get_id());
@@ -514,11 +505,7 @@ void Document::applyInsert(const InsertOperation& oper) {
 
     // apply every child waiting for the element
     for (const InsertOperation& child: waiting_children) {
-        std::cout << "UNBUFFERED INSERT: "
-            << child.get_id().to_String()
-            << " with parent "
-            << child.get_parent().to_String()
-            << std::endl;
+        // std::cout << "UNBUFFERED INSERT: " << child.get_id().to_String() << " with parent " << child.get_parent().to_String() << std::endl;
         applyInsert(child);
     }
 
@@ -550,7 +537,7 @@ void Document::applyDelete(const RemoveOperation& oper) {
     if (elements.contains(oper.get_target())) {
         elements.find(oper.get_target())->second.set_deleted(true); // running this twice doesn't change the flag back so its fine?
     } else {
-        std::cout << "BUFFERED DELETE: " << oper.get_target().to_String() << std::endl;
+        // std::cout << "BUFFERED DELETE: " << oper.get_target().to_String() << std::endl;
         buffered_deletes.insert(oper.get_target());
     }
 };

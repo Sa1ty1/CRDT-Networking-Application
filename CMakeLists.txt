@@ -34,6 +34,7 @@ add_executable(main
     crdt_editor/tests/UI_tests.cpp
     crdt_editor/tests/CRDT_tests.cpp
     crdt_editor/UI/viewport.cpp
+    crdt_editor/persistance/document_store.cpp
 )
 
 target_include_directories(main PRIVATE
