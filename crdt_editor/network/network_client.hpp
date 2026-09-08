@@ -4,15 +4,23 @@
 #include <utility>
 #include <limits>
 #include <stdexcept>
+#include <functional>
 #include <network/editor_session.hpp>
 #include <network/framing.hpp>
+#include <persistance/document_id.hpp>
+
 
 enum class NetworkClientState {
     DISCONNECTED,
     CONNECTING,
+    REGISTERING,
+    REGISTERED,
     SYNCING,
     LIVE,
 };
+
+using StateChangeCallback = std::function<void(NetworkClientState)>;
+
 
 class NetworkClient : public std::enable_shared_from_this<NetworkClient> {
 public:
@@ -41,7 +49,14 @@ public:
 
     void poll();
 
+    void send_open_document(const DocumentID& document_id);
+
+    void set_state_change_callback(StateChangeCallback callback);
+
 private:
+
+    void set_state(NetworkClientState new_state);
+
     void start_read();
 
     void start_write();
@@ -58,4 +73,5 @@ private:
     std::deque<std::shared_ptr<std::string>> write_queue;
     std::uint64_t connection_generation = 0;
     NetworkClientState state = NetworkClientState::DISCONNECTED;
+    StateChangeCallback state_change_callback;
 };

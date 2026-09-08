@@ -2,22 +2,29 @@
 #include <string>
 #include <ranges>
 #include <optional>
-#include<src/operation.hpp>
+#include <src/operation.hpp>
+#include <persistance/document_id.hpp>
 
 struct CursorUpdate {
     ElementID position;
 };
 
+struct OpenDocument {
+    DocumentID document_id;
+};
+
 enum class MessageType {
     HELLO,
+    HELLO_ACK,
     OPERATION,
     SYNC_REQUEST,
     SYNC_RESPONSE,
     SYNC_COMPLETE,
     CURSOR_UPDATE,
+    OPEN_DOCUMENT   
 };
 
-using MessagePayload = std::variant<std::monostate, Operation, std::vector<Operation>, CursorUpdate>;
+using MessagePayload = std::variant<std::monostate, Operation, std::vector<Operation>, CursorUpdate, OpenDocument>;
 
 std::string serialize_message_type(MessageType type);
 MessageType deserialize_message_type(const std::string& s);

@@ -42,7 +42,9 @@
 int main(int argc, char* argv[]) {
     boost::asio::io_context io;
 
-    QApplication app(argc, argv);
+    QApplication app(argc, argv); 
+
+    Server server(io, 12345);
 
     Document document_a;
     Cursor cursor_a(ROOT_ID);
@@ -68,10 +70,19 @@ int main(int argc, char* argv[]) {
 
     EditorWidget editor_b(session_b, *network_b);
 
-    Server server(io, 12345);
-
     editor_a.show();
     editor_b.show();
+
+    network_a->set_state_change_callback([network_a](NetworkClientState state) {
+        if (state == NetworkClientState::REGISTERED) {
+            network_a->send_open_document("document_a");
+        }
+    });
+    network_b->set_state_change_callback([network_b](NetworkClientState state) {
+        if (state == NetworkClientState::REGISTERED) {
+            network_b->send_open_document("document_a");
+        }
+    });
 
     network_a->connect("127.0.0.1", 12345);
     network_b->connect("127.0.0.1", 12345);

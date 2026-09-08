@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <network/server.hpp>
 #include <network/framing.hpp>
+#include <optional>
+#include <persistance/document_store.hpp>
 
 // Responsibility
 /*
@@ -21,6 +23,7 @@ ClientConnection
 
 enum class ClientState {
     UNREGISTERED,
+    REGISTERED,
     SYNCING,
     LIVE,
     DISCONNECTED
@@ -50,6 +53,17 @@ public:
     void mark_syncing();
     void mark_live();
     void mark_disconnected();
+    void mark_registered();
+
+    void set_current_document(const DocumentID& id);
+
+    void clear_current_document();
+
+    bool has_current_document() const;
+
+    const DocumentID& get_current_document() const;
+
+
 
 private:
 
@@ -60,7 +74,6 @@ private:
     void process_message(std::string message);
 
     void start_write();
-
 
 private:
 
@@ -75,6 +88,8 @@ private:
     std::vector<char> read_body_buffer;
 
     std::deque<std::string> write_queue; //outgoing message state
+
+    std::optional<DocumentID> current_document;
 
     ClientState state = ClientState::UNREGISTERED;
 

@@ -27,6 +27,8 @@ std::string Message::serialize() const {
                 result += operation_serializer::serialize(op);
                 result += '\n';
             }
+        } else if constexpr(std::is_same_v<T, OpenDocument>) {
+            result += value.document_id;
         }
     }, payload);
 
@@ -49,6 +51,9 @@ Message Message::deserialize(const std::string& serialized_message) {
     std::string sender = tokens.at(1);
     switch (type) {
         case MessageType::HELLO: {
+            return Message(type, sender, std::monostate{});
+        }
+        case MessageType::HELLO_ACK: {
             return Message(type, sender, std::monostate{});
         }
         case MessageType::OPERATION: {
@@ -87,6 +92,13 @@ Message Message::deserialize(const std::string& serialized_message) {
                 CursorUpdate{position}
             );
         }
+        case MessageType::OPEN_DOCUMENT: {
+            if (tokens.size() < 3 || tokens[2].empty()) {
+                throw std::invalid_argument("OPEN_DOCUMENT message missing document ID.");
+            }
+            OpenDocument request{tokens[2]};
+            return Message(type, sender, request);
+        }
         default: {
             throw std::invalid_argument("Unknown message type");
         }
@@ -111,6 +123,10 @@ namespace message_serializer {
                 return "SYNC_COMPLETE";
             case MessageType::CURSOR_UPDATE:
                 return "CURSOR_UPDATE";
+            case MessageType::OPEN_DOCUMENT:
+                return "OPEN_DOCUMENT";
+            case MessageType::HELLO_ACK:
+                return "HELLO_ACK";
         }
         throw std::invalid_argument("Unknown message type");
     }
@@ -132,6 +148,12 @@ namespace message_serializer {
         }
         if (s == "CURSOR_UPDATE") {
             return MessageType::CURSOR_UPDATE;
+        }
+        if (s == "OPEN_DOCUMENT") {
+            return MessageType::OPEN_DOCUMENT;
+        }
+        if (s == "HELLO_ACK") {
+            return MessageType::HELLO_ACK;
         }
         throw std::invalid_argument("Unknown message type: " + s);
     }

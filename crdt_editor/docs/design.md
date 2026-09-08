@@ -118,3 +118,9 @@ START
           ├── OperationLog
           ├── PersistentOperationLog
           └── Route to clients
+
+
+
+## Issues to fix
+
+1. Some issue when you restart the documents/clients from the log and typing is not where you expect and also some other issues.

@@ -6,6 +6,8 @@
 #include <network/message.hpp>
 #include <src/operation_log.hpp>
 #include <persistance/persistance_log.hpp>
+#include <persistance/document_store.hpp>
+#include <persistance/document_id.hpp>
 
 class ClientConnection;
 
@@ -18,7 +20,7 @@ public:
     // create listening socket -> bind to port -> start listening -> begin accepting clients
     Server(boost::asio::io_context& io, unsigned short port);
 
-    OperationLog get_log() const;
+    // OperationLog get_log() const;
 
     void receive_message(std::shared_ptr<ClientConnection> sender, std::string serialized_message);
 
@@ -26,11 +28,13 @@ public:
 
     void finish_sync(std::shared_ptr<ClientConnection> client);
 
-    void load_persistent_state();
+    // void load_persistent_state();
 
     void route_cursor_update(const std::shared_ptr<ClientConnection>& sender, const Message& message);
 
     void send_presence(const std::shared_ptr<ClientConnection>& client);
+
+    void open_document(std::shared_ptr<ClientConnection> client, const DocumentID& document_id);
 
 private:
     // begin asnychronously waiting for the next incoming TCP connection
@@ -45,11 +49,12 @@ private:
 private:
     boost::asio::ip::tcp::acceptor acceptor; // listens at a port
     std::unordered_map<std::string, std::shared_ptr<ClientConnection>> clients;
-    //std::unordered_set<std::string> syncing_clients;
+    //std::unordered_set<st d::string> syncing_clients;
     std::unordered_map<std::string, std::vector<Operation>> pending_sync_operations;
-    OperationLog oplog;
+    //OperationLog oplog;
     // std::unordered_set<Operation> applied_operations; // will want to look into duplicate operations later
-    PersistentOperationLog persistant_log;
+    //PersistentOperationLog persistant_log;
+    DocumentStore document_store;
     std::unordered_map<std::string, ClientPresence> presence;
 };
 

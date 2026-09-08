@@ -2,9 +2,10 @@
 #include <network/client_connection.hpp>
 
 // create listening socket -> bind to port -> start listening -> begin accepting clients
-Server::Server(boost::asio::io_context& io, unsigned short port): acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)), persistant_log("operations.log") {
+Server::Server(boost::asio::io_context& io, unsigned short port): acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) {
     std::cout << "Server listening on port " << port << '\n';
-    load_persistent_state();
+    document_store.load();
+    //load_persistent_state();
     accept_client();
 }
 
@@ -36,14 +37,18 @@ void Server::receive_message(std::shared_ptr<ClientConnection> sender, std::stri
                     sender->disconnect();
                     return;
                 }
+                if (!sender->has_current_document()) {
+                    std::cerr << "Live client has no current document" << std::endl;
+                    sender->disconnect();
+                    return;
+                }
                 const auto& op = std::get<Operation>(message.get_payload());
+                const DocumentID& document_id = sender->get_current_document();
 
-                // if (applied_operations.contains(op)) { // will want to look into duplicate operations later
-                //     return;
-                // }
-                // applied_operations.insert(op);
-                oplog.record(op);
-                persistant_log.record(op);
+                PersistentDocument& document = document_store.get_document(document_id);
+                document.apply_operation(op);
+                // oplog.record(op);
+                // persistant_log.record(op);
                 route_message(sender, message);
                 return;
             }
@@ -68,6 +73,28 @@ void Server::receive_message(std::shared_ptr<ClientConnection> sender, std::stri
                 return;
             }
 
+            case MessageType::OPEN_DOCUMENT: {
+                if (!sender->is_registered()) {
+                    std::cerr << "Received OPEN_DOCUMENT from unregistered client" << std::endl;
+                    sender->disconnect();
+                    return;
+                }
+                if (sender->has_current_document()) {
+                    std::cerr << "Client already has a document open. This should be fixed in a later update." << std::endl;
+                    sender->disconnect();
+                    return;
+                }
+                const auto& request = std::get<OpenDocument>(message.get_payload());
+
+                try {
+                    open_document(sender, request.document_id);
+                } catch (const std::exception& e) {
+                    std::cerr << "Failed to open document: " << e.what() << std::endl;
+                    sender->disconnect();
+                }
+                return;
+            }
+
             default:
                 std::cerr << "Unexpected message type" << std::endl;
                 sender->disconnect();
@@ -79,16 +106,14 @@ void Server::receive_message(std::shared_ptr<ClientConnection> sender, std::stri
     }
 }
 
-void Server::load_persistent_state() {
-    for (const auto& operation : persistant_log.load()) {
-        oplog.record(operation);
-    }
-}
-
 void Server::finish_sync(std::shared_ptr<ClientConnection> client) {
 
     if (!client->is_syncing()) {
         return;
+    }
+
+    if (!client->has_current_document()) {
+        throw std::runtime_error("Cannot finish sync: client has no current document.");
     }
 
     const std::string& client_id = client->get_client_id();
@@ -135,11 +160,20 @@ void Server::unregister_client(std::shared_ptr<ClientConnection> connection) {
 }
 
 void Server::send_history(std::shared_ptr<ClientConnection> connection) {
-    Message response(MessageType::SYNC_RESPONSE, "server", oplog.get_log());
+    if (!connection->has_current_document()) {
+        throw std::runtime_error("Cannot send history: client has no current document.");
+    }
+    const DocumentID& document_id = connection->get_current_document();
+    PersistentDocument& document = document_store.get_document(document_id);
+    Message response(MessageType::SYNC_RESPONSE, "server", document.get_history());
     connection->send(response.serialize());
 }
 
 void Server::route_cursor_update(const std::shared_ptr<ClientConnection>& sender, const Message& message) {
+
+    if (!sender->has_current_document()) {
+        throw std::runtime_error("Cannot route message: sender has no current document.");
+    }
 
     const auto& update = std::get<CursorUpdate>(message.get_payload());
     presence.at(sender->get_client_id()).cursor = update.position;
@@ -150,6 +184,13 @@ void Server::route_cursor_update(const std::shared_ptr<ClientConnection>& sender
         if (client == sender) {
             continue;
         }
+        if (!client->has_current_document()) {
+            continue;
+        }
+        if (client->get_current_document() != sender->get_current_document()) {
+            continue;
+        }
+
         if (client->is_live()) {
             std::cout << "Routing cursor to " << client_id << std::endl;
             client->send(serialized);
@@ -158,20 +199,36 @@ void Server::route_cursor_update(const std::shared_ptr<ClientConnection>& sender
 }
 
 void Server::send_presence(const std::shared_ptr<ClientConnection>& client) {
+
+    if (!client->has_current_document()) {
+        throw std::runtime_error("Cannot send presence: client has no current document.");
+    }
+
+    const DocumentID& document_id = client->get_current_document();
+
     for (const auto& [client_id, client_presence] : presence) {
+
         if (client_id == client->get_client_id()) {
             continue; // dont send to self
         }
         if (!clients.contains(client_id)) {
             continue; // don't send to not connected clients
         }
+
         auto other = clients.at(client_id);
+
         if (!other->is_live()) {
             continue; // don't send to not live clients
         }
+        if (!other->has_current_document()) {
+            continue;
+        }
+        if (other->get_current_document() != document_id) {
+            continue;
+        }
+
         Message message(MessageType::CURSOR_UPDATE, client_id, CursorUpdate{client_presence.cursor});
         client->send(message.serialize());
-
     }
 }
 
@@ -199,25 +256,34 @@ void Server::register_client(std::shared_ptr<ClientConnection> connection, std::
         throw std::runtime_error("Client ID already connected");
     }
     std::cout << "Registering [" << client_id << "]\n";
-    auto history = oplog.get_log();
 
     clients.emplace(client_id, connection); // probably want some try catch or other failsafe stuff
     pending_sync_operations.emplace(client_id, std::vector<Operation>{});
     presence.emplace(client_id, ClientPresence{ElementID(0, "__ROOT__")}); //Default sets it at ROOT
 
     connection->set_client_id(client_id);
-    connection->mark_syncing();
-
-    send_history(connection);
+    connection->mark_registered();
+    Message ack(MessageType::HELLO_ACK, "server", std::monostate{});
+    connection->send(ack.serialize());
 }
 
 void Server::route_message(const std::shared_ptr<ClientConnection>& sender, const Message& message) {
+    if (!sender->has_current_document()) {
+        throw std::runtime_error("Cannot route message: sender has no current document.");
+    }
+    
     std::string serialized = message.serialize();
-
     const auto& operation = std::get<Operation>(message.get_payload());
+    // const DocumentID& document_id = sender->get_current_document();
 
     for (const auto& [client_id, client] : clients) {
         if (client == sender) {
+            continue;
+        }
+        if (!client->has_current_document()) {
+            continue;
+        }
+        if (client->get_current_document() != sender->get_current_document()) {
             continue;
         }
         if (client->is_syncing()) {
@@ -229,6 +295,27 @@ void Server::route_message(const std::shared_ptr<ClientConnection>& sender, cons
     }
 }
 
-OperationLog Server::get_log() const {
-    return oplog;
+void Server::open_document(std::shared_ptr<ClientConnection> client, const DocumentID& document_id) {
+    if (document_id.empty()) {
+        throw std::runtime_error("Document ID cannot be empty.");
+    }
+    if (!client->is_registered()) {
+        throw std::runtime_error("Only registered clients can open documents.");
+    }
+    if (!document_store.exists(document_id)) {
+        document_store.create_document(document_id);
+    }
+
+    PersistentDocument& document = document_store.get_document(document_id);
+    auto history = document.get_history();
+
+    client->set_current_document(document_id);
+    client->mark_syncing();
+    Message response(MessageType::SYNC_RESPONSE, "server", history);
+    client->send(response.serialize());
 }
+
+
+// OperationLog Server::get_log() const {
+//     return oplog;
+// }

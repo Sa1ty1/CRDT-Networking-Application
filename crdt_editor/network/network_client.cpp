@@ -23,12 +23,13 @@ void NetworkClient::connect(const std::string& host, unsigned short port) {
     network_socket.open(tcp::v4(), ec);
     if (ec) {
         std::cerr << "Socket open error: " << ec.message() << std::endl;
-        state = NetworkClientState::DISCONNECTED;
+        set_state(NetworkClientState::DISCONNECTED);
+        // state = NetworkClientState::DISCONNECTED;
         return;
     }
 
-
-    state = NetworkClientState::CONNECTING;
+    set_state(NetworkClientState::CONNECTING);
+    //state = NetworkClientState::CONNECTING;
     const std::uint64_t generation = ++connection_generation;
 
     auto self = shared_from_this();
@@ -43,7 +44,8 @@ void NetworkClient::connect(const std::string& host, unsigned short port) {
             }
             if (ec) {
                 std::cerr << "Resolve error: " << ec.message() << std::endl;
-                self->state = NetworkClientState::DISCONNECTED;
+                self->set_state(NetworkClientState::DISCONNECTED);
+                // self->state = NetworkClientState::DISCONNECTED;
                 return;
             }
             boost::asio::async_connect(
@@ -55,12 +57,14 @@ void NetworkClient::connect(const std::string& host, unsigned short port) {
                     }
                     if (ec) {
                         std::cerr << "Connect error: " << ec.message() << std::endl;
-                        self->state = NetworkClientState::DISCONNECTED;
+                        self->set_state(NetworkClientState::DISCONNECTED);
+                        // self->state = NetworkClientState::DISCONNECTED;
                         ++self->connection_generation;
                         self->close_socket();
                         return;
                     }
-                    self->state = NetworkClientState::SYNCING;
+                    self->set_state(NetworkClientState::REGISTERING);
+                    //self->state = NetworkClientState::REGISTERED;
                     std::cout << "Connected to server" << std::endl;
                     self->send_hello();
                     self->start_read();
@@ -74,7 +78,8 @@ void NetworkClient::disconnect() {
     if (state == NetworkClientState::DISCONNECTED) {
         return;
     }
-    state = NetworkClientState::DISCONNECTED;
+    set_state(NetworkClientState::DISCONNECTED);
+    // state = NetworkClientState::DISCONNECTED;
     ++connection_generation; // invalidate callbacks belonging to the old connection
     
     close_socket();
@@ -143,6 +148,40 @@ void NetworkClient::poll() {
     io.poll();
 }
 
+void NetworkClient::send_open_document(const DocumentID& document_id) {
+    if (state != NetworkClientState::REGISTERED) {
+        std::cerr << "Cannot open document: client is not registered" << std::endl;
+        return;
+    }
+    if (document_id.empty()) {
+        std::cerr << "Cannot open document: empty document ID" << std::endl;
+        return;
+    }
+
+    OpenDocument request{document_id};
+
+    Message message(MessageType::OPEN_DOCUMENT, client_id, request);
+    set_state(NetworkClientState::SYNCING);
+    //state = NetworkClientState::SYNCING;
+    send_message(message.serialize());
+
+}
+
+void NetworkClient::set_state_change_callback(StateChangeCallback callback) {
+    state_change_callback = std::move(callback);
+}
+
+void NetworkClient::set_state(NetworkClientState new_state) {
+    if (state == new_state) {
+        return;
+    }
+    state = new_state;
+    if (state_change_callback) {
+        state_change_callback(state);
+    }
+}
+
+
 void NetworkClient::start_read() {
     auto self = shared_from_this();
     const std::uint64_t generation = connection_generation;
@@ -184,7 +223,7 @@ void NetworkClient::start_read() {
                     }
                     std::string message(self->read_body_buffer.begin(), self->read_body_buffer.end());
                     self->handle_message(message);
-                    if (self->state == NetworkClientState::SYNCING || self->state == NetworkClientState::LIVE) {
+                    if (self->state != NetworkClientState::DISCONNECTED) {
                         self->start_read();
                     }
                 }
@@ -211,7 +250,7 @@ void NetworkClient::start_write() {
                 return;
             }
             self->write_queue.pop_front();
-            if (!self->write_queue.empty() && (self->state == NetworkClientState::SYNCING || self->state == NetworkClientState::LIVE)) {
+            if (!self->write_queue.empty() && self->state != NetworkClientState::DISCONNECTED) {
                 self->start_write();
             }
         }
@@ -242,7 +281,8 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                 const auto& history = std::get<std::vector<Operation>>(message.get_payload());
                 session.apply_history(history);
 
-                state = NetworkClientState::LIVE;
+                set_state(NetworkClientState::LIVE);
+                //state = NetworkClientState::LIVE;
 
                 Message complete(MessageType::SYNC_COMPLETE, client_id, std::monostate{});
                 send_message(complete.serialize());
@@ -250,7 +290,20 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                 break;
             }
             case MessageType::HELLO: {
+                std::cerr << "Unexpected HELLO from server" << std::endl;
+                disconnect();
+                return;
                 //client shouldn't normally revieve this
+                //break;
+            }
+            case MessageType::HELLO_ACK: {
+                if (state != NetworkClientState::REGISTERING) {
+                    std::cerr << "Unexpected HELLO_ACK from server" << std::endl;
+                    disconnect();
+                    return;
+                }
+                std::cout << "Registration confirmed by server" << std::endl;
+                set_state(NetworkClientState::REGISTERED);
                 break;
             }
             case MessageType::SYNC_COMPLETE: {
@@ -270,7 +323,9 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                 break;
             }
             default: {
-                break;
+                std::cerr << "Unexpected message type from server" << std::endl;
+                disconnect();
+                return;
             }
         }
 
