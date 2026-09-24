@@ -2,38 +2,34 @@
 
 
 
-PersistentOperationLog::PersistentOperationLog(const std::string& filename) : filename(filename) {
-    std::ofstream file(filename, std::ios::app);
-
-    if (!file) {
-        throw std::runtime_error("Failed to open persistant operation log");
-    }
+PersistentOperationLog::PersistentOperationLog(SQLiteDatabase& database, DocumentID document_id) : database(database), document_id(std::move(document_id)) {
+    
 }
 
 std::vector<Operation> PersistentOperationLog::load() const {
-    std::ifstream file(filename);
-    if (!file) {
-        throw std::runtime_error("Failed to open persistent operation log");
-    }
+    // SQLite SELECT will go here
+    const auto serialized_operations = database.get_operations(document_id);
 
     std::vector<Operation> operations;
-    std::string line;
+    operations.reserve(serialized_operations.size());
 
-    while (std::getline(file, line)) {
-        if (line.empty()) {
-            continue;
-        }
-        operations.push_back(operation_serializer::deserialize(line));
+    for (const auto& data : serialized_operations) {
+        operations.push_back(operation_serializer::deserialize(data));
     }
     return operations;
 }
 
 void PersistentOperationLog::record(const Operation& operation) {
-    std::ofstream file(filename, std::ios::app);
+    const std::string operation_data = operation_serializer::serialize(operation);
 
-    if (!file) {
-        throw std::runtime_error("Failed to open persistent operation log");
-    }
-
-    file << operation_serializer::serialize(operation) << '\n';
+    const std::string operation_id = hash(operation_data);
+    
+    database.insert_operation(document_id, operation_id, operation_data);
+    
+    // Insert into the database
+    // prepare INSERT
+    // bind document_id
+    // bind operation_id
+    // bind operation_data
+    // execute
 }

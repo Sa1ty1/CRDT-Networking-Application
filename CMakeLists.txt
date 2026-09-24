@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Boost REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(SQLite3 REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 add_executable(main
     crdt_editor/app/main.cpp
@@ -37,6 +39,8 @@ add_executable(main
     crdt_editor/persistance/document_store.cpp
     crdt_editor/persistance/persistent_document.cpp
     crdt_editor/persistance/document_id.hpp
+    crdt_editor/persistance/sqlite_database.cpp
+    crdt_editor/util/hash.cpp
 )
 
 target_include_directories(main PRIVATE
@@ -49,4 +53,6 @@ target_link_libraries(main
         ws2_32
         mswsock
         Qt6::Widgets
+        SQLite3::SQLite3
+        OpenSSL::Crypto
 )

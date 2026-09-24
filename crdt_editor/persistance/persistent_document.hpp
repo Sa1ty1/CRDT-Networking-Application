@@ -4,7 +4,7 @@
 
 class PersistentDocument {
 public:
-    PersistentDocument(std::string filename);
+    PersistentDocument(SQLiteDatabase& database, DocumentID document_id);
 
     Document& get_document();
     const Document& get_document() const;

@@ -1,8 +1,8 @@
 #include <persistance/document_store.hpp>
 
 
-DocumentStore::DocumentStore() {
-    std::filesystem::create_directories("data");
+DocumentStore::DocumentStore() : database("documents.db") {
+    load();
 }
 
 bool DocumentStore::exists(const DocumentID& id) const {
@@ -22,8 +22,10 @@ PersistentDocument& DocumentStore::create_document(const DocumentID& id) {
     if (exists(id)) {
         throw std::runtime_error("Document already exists: " + id);
     }
-    std::string filename = "data/" + id + ".log";
-    auto [it, inserted] = documents.emplace(std::piecewise_construct, std::forward_as_tuple(id), std::forward_as_tuple(filename));
+
+    database.insert_document(id);
+
+    auto [it, inserted] = documents.emplace(std::piecewise_construct, std::forward_as_tuple(id), std::forward_as_tuple(database, id));
     if (!inserted) {
         throw std::runtime_error("Failed to create document: " + id);
     }
@@ -35,6 +37,7 @@ void DocumentStore::remove_document(const DocumentID& id) {
     if (it == documents.end()) {
         throw std::runtime_error("Document does not exist: " + id);
     }
+    database.delete_document(id);
     documents.erase(it);
 }
 
@@ -48,5 +51,17 @@ std::vector<DocumentID> DocumentStore::list_documents() const {
 }
 
 void DocumentStore::load() {
-    //TODO
+    const auto document_ids = database.get_document_ids();
+    for (const auto& id: document_ids) {
+        auto [it, inserted] = documents.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(id),
+            std::forward_as_tuple(database, id)
+        );
+
+        if (!inserted) {
+            throw std::runtime_error("Document already loaded: " + id);
+        }
+        it->second.load();
+    }
 }

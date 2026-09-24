@@ -4,7 +4,7 @@
 // create listening socket -> bind to port -> start listening -> begin accepting clients
 Server::Server(boost::asio::io_context& io, unsigned short port): acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) {
     std::cout << "Server listening on port " << port << '\n';
-    document_store.load();
+    // document_store.load(); already done in instantiating the SQLiteDatabase Class
     //load_persistent_state();
     accept_client();
 }

@@ -5,6 +5,7 @@
 #include <src/document.hpp>
 #include <persistance/persistent_document.hpp>
 #include <persistance/document_id.hpp>
+#include <persistance/sqlite_database.hpp>
 
 class DocumentStore {
 public:
@@ -18,5 +19,6 @@ public:
     DocumentStore();
 
 private:
+    SQLiteDatabase database;
     std::unordered_map<DocumentID, PersistentDocument>  documents;
 };

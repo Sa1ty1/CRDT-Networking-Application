@@ -103,7 +103,6 @@ Message Message::deserialize(const std::string& serialized_message) {
             throw std::invalid_argument("Unknown message type");
         }
     }
-
 }
 
 Message::Message(const MessageType& t, const std::string& s, const MessagePayload& mp) : type(std::move(t)), sender(std::move(s)), payload(std::move(mp)) {}

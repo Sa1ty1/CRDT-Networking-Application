@@ -1,6 +1,6 @@
 #include <persistance/persistent_document.hpp>
 
-PersistentDocument::PersistentDocument(std::string filename): document(), persistent_log(filename) {}
+PersistentDocument::PersistentDocument(SQLiteDatabase& database, DocumentID document_id): persistent_log(database, std::move(document_id)) {}
 
 Document& PersistentDocument::get_document() {
     return document;
@@ -35,3 +35,25 @@ void PersistentDocument::load() {
     document.apply(operation);
    }
 }
+
+
+
+
+/*
+SCHEMA:
+
+CREATE TABLE documents (
+    document_id TEXT PRIMARY KEY
+);
+
+CREATE TABLE operations (
+    document_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    operation_data TEXT NOT NULL,
+
+    PRIMARY KEY (document_id, operation_id),
+
+    FOREIGN KEY (document_id)
+        REFERENCES documents(document_id)
+);
+*/

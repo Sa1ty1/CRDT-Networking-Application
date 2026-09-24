@@ -3,16 +3,20 @@
 #include <stdexcept>
 #include <vector>
 #include <string>
+#include <persistance/sqlite_database.hpp>
+#include <persistance/document_id.hpp>
 #include <src/operation.hpp>
+#include <util/hash.hpp>
 
 class PersistentOperationLog {
 public:
-    explicit PersistentOperationLog(const std::string& filename);
+    explicit PersistentOperationLog(SQLiteDatabase& database, DocumentID document_id);
 
     void record(const Operation& operation);
 
     std::vector<Operation> load() const;
 
 private:
-    std::string filename;
+    SQLiteDatabase& database;
+    DocumentID document_id;
 };
