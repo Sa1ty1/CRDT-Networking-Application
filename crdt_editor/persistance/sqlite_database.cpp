@@ -120,56 +120,64 @@ std::vector<DocumentID> SQLiteDatabase::get_document_ids() const {
 }
 
 void SQLiteDatabase::delete_document(const DocumentID& document_id) {
-    const char* delete_operations = "DELETE FROM operations WHERE document_id = ?;";
-    sqlite3_stmt* statement = nullptr;
 
-    int rc = sqlite3_prepare_v2(db, delete_operations, -1, &statement, nullptr);
+    try {
+        begin_transaction();
 
-    if (rc != SQLITE_OK) {
-        throw std::runtime_error("Failed to prepare operation deletion: " + std::string(sqlite3_errmsg(db)));
-    }
-    rc = sqlite3_bind_text(statement, 1, document_id.c_str(), -1, SQLITE_TRANSIENT);
-    if (rc != SQLITE_OK) {
+        const char* delete_operations = "DELETE FROM operations WHERE document_id = ?;";
+        sqlite3_stmt* statement = nullptr;
+
+        int rc = sqlite3_prepare_v2(db, delete_operations, -1, &statement, nullptr);
+
+        if (rc != SQLITE_OK) {
+            throw std::runtime_error("Failed to prepare operation deletion: " + std::string(sqlite3_errmsg(db)));
+        }
+        rc = sqlite3_bind_text(statement, 1, document_id.c_str(), -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            sqlite3_finalize(statement);
+            throw std::runtime_error("Failed to bind document ID");
+        }
+
+        rc = sqlite3_step(statement);
+
+        if (rc != SQLITE_DONE) {
+            std::string error = sqlite3_errmsg(db);
+            sqlite3_finalize(statement);
+
+            throw std::runtime_error("Failed to delete operations: " + error);
+        }
         sqlite3_finalize(statement);
-        throw std::runtime_error("Failed to bind document ID");
-    }
 
-    rc = sqlite3_step(statement);
+        const char* delete_document = "DELETE FROM documents WHERE document_id = ?;";
 
-    if (rc != SQLITE_DONE) {
-        std::string error = sqlite3_errmsg(db);
+        rc = sqlite3_prepare_v2(db, delete_document, -1, &statement, nullptr);
+        if (rc != SQLITE_OK) {
+            throw std::runtime_error("Failed to prepare document deletion: " + std::string(sqlite3_errmsg(db)));
+        }
+
+        rc = sqlite3_bind_text(statement, 1, document_id.c_str(), -1, SQLITE_TRANSIENT);
+
+        if (rc != SQLITE_OK) {
+            sqlite3_finalize(statement);
+            throw std::runtime_error("Failed to bind document ID");
+        }
+
+        rc = sqlite3_step(statement);
+
+        if (rc != SQLITE_DONE) {
+            std::string error = sqlite3_errmsg(db);
+            sqlite3_finalize(statement);
+            throw std::runtime_error("Failed to delete document: " + error);
+        }
+
         sqlite3_finalize(statement);
 
-        throw std::runtime_error("Failed to delete operations: " + error);
+        commit();
+    } catch (...) { // ... catches any exception
+        rollback();
+        throw;
     }
-    sqlite3_finalize(statement);
-
-    const char* delete_document = "DELETE FROM documents WHERE document_id = ?;";
-
-    rc = sqlite3_prepare_v2(db, delete_document, -1, &statement, nullptr);
-    if (rc != SQLITE_OK) {
-        throw std::runtime_error("Failed to prepare document deletion: " + std::string(sqlite3_errmsg(db)));
-    }
-
-    rc = sqlite3_bind_text(statement, 1, document_id.c_str(), -1, SQLITE_TRANSIENT);
-
-    if (rc != SQLITE_OK) {
-        sqlite3_finalize(statement);
-        throw std::runtime_error("Failed to bind document ID");
-    }
-
-    rc = sqlite3_step(statement);
-
-    if (rc != SQLITE_DONE) {
-        std::string error = sqlite3_errmsg(db);
-        sqlite3_finalize(statement);
-        throw std::runtime_error("Failed to delete document: " + error);
-    }
-
-    sqlite3_finalize(statement);
 }
-
-
 
 void SQLiteDatabase::insert_document(const DocumentID& document_id) {
     const char* sql = "INSERT INTO documents (document_id) VALUES (?);";

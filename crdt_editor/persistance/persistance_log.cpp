@@ -7,14 +7,13 @@ PersistentOperationLog::PersistentOperationLog(SQLiteDatabase& database, Documen
 }
 
 std::vector<Operation> PersistentOperationLog::load() const {
-    // SQLite SELECT will go here
     const auto serialized_operations = database.get_operations(document_id);
 
     std::vector<Operation> operations;
     operations.reserve(serialized_operations.size());
 
     for (const auto& data : serialized_operations) {
-        operations.push_back(operation_serializer::deserialize(data));
+        operations.emplace_back(operation_serializer::deserialize(data));
     }
     return operations;
 }

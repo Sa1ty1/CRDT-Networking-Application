@@ -50,6 +50,13 @@ void EditorSession::flush_incoming() {
 
 void EditorSession::apply_history(const std::vector<Operation>& history){
     for(const auto& op : history) {
+        std::visit([&](auto const& operation) {
+            using T = std::decay_t<decltype(operation)>;
+            if constexpr (std::is_same_v<T, InsertOperation>) {
+                gen.sync_clock(operation.get_id().get_lamport());
+            }
+        }, op);
+        
         apply_operation(op, false);
     }
 
