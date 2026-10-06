@@ -2,13 +2,22 @@
 
 using tcp = boost::asio::ip::tcp;
 
-NetworkClient::NetworkClient(boost::asio::io_context& io, EditorSession& session, std::string client_id): io(io), network_socket(io), client_id(std::move(client_id)), session(session){}
+NetworkClient::NetworkClient(boost::asio::io_context& io, std::string client_id,  ThreadSafeQueue<Message>& incoming_queue, ThreadSafeQueue<Message>& outgoing_queue): io(io), network_socket(io), client_id(std::move(client_id)), incoming_queue(incoming_queue), outgoing_queue(outgoing_queue) {}
 
+// will need to change; violates multithreading invarient
 NetworkClientState NetworkClient::get_state() const {
     return state;
 }
 
 void NetworkClient::connect(const std::string& host, unsigned short port) {
+    auto self = shared_from_this();
+
+    boost::asio::post(io, [self, host, port]() {
+        self->connect_impl(host, port);
+    });
+}
+
+void NetworkClient::connect_impl(const std::string& host, unsigned short port) {
 
     if (state != NetworkClientState::DISCONNECTED) {
         std::cerr << "Cannot connect: client is already connected or connecting" << std::endl;
@@ -75,6 +84,14 @@ void NetworkClient::connect(const std::string& host, unsigned short port) {
 }
 
 void NetworkClient::disconnect() {
+    auto self = shared_from_this();
+
+    boost::asio::post(io, [self]() {
+        self->disconnect_impl();
+    });
+}
+
+void NetworkClient::disconnect_impl() {
     if (state == NetworkClientState::DISCONNECTED) {
         return;
     }
@@ -92,10 +109,10 @@ void NetworkClient::disconnect() {
 void NetworkClient::send_hello() {
     Message hello(MessageType::HELLO, client_id, std::monostate{});
     std::cout << "Sending HELLO from " << client_id << '\n';
-    send_message(hello.serialize());
+    send_message_impl(hello.serialize());
 }
 
-void NetworkClient::send_message(std::string message) {
+void NetworkClient::send_message_impl(std::string message) {
     if (state == NetworkClientState::DISCONNECTED || state == NetworkClientState::CONNECTING) {
         std::cerr << "Cannot send message: client is not connected" << std::endl;
         return;
@@ -121,34 +138,20 @@ void NetworkClient::close_socket() {
     network_socket.close(ec);
 }
 
-void NetworkClient::send_outgoing_operations() {
-    if (state != NetworkClientState::LIVE) {
-        std::cerr << "Cannot send operations: client is not connected" << std::endl;
-        return;
-    }
-    auto operations = session.take_outgoing_operations();
-
-    for (const auto& operation : operations) {
-        Message message(MessageType::OPERATION, client_id, operation);
-        send_message(message.serialize());
-    }
-}
-
-void NetworkClient::send_cursor_update(const ElementID& position) {
-    if (state != NetworkClientState::LIVE) {
-        return;
-    }
-    CursorUpdate update{position};
-
-    Message message(MessageType::CURSOR_UPDATE, client_id, update);
-    send_message(message.serialize());
-}
-
 void NetworkClient::poll() {
     io.poll();
 }
 
 void NetworkClient::send_open_document(const DocumentID& document_id) {
+    auto self = shared_from_this();
+
+    boost::asio::post(io, [self, document_id] () {
+        self->send_open_document_impl(document_id);
+    });
+}
+
+
+void NetworkClient::send_open_document_impl(const DocumentID& document_id) {
     if (state != NetworkClientState::REGISTERED) {
         std::cerr << "Cannot open document: client is not registered" << std::endl;
         return;
@@ -163,7 +166,7 @@ void NetworkClient::send_open_document(const DocumentID& document_id) {
     Message message(MessageType::OPEN_DOCUMENT, client_id, request);
     set_state(NetworkClientState::SYNCING);
     //state = NetworkClientState::SYNCING;
-    send_message(message.serialize());
+    send_message_impl(message.serialize());
 
 }
 
@@ -232,6 +235,7 @@ void NetworkClient::start_read() {
     );
 }
 
+
 void NetworkClient::start_write() {
     auto self = shared_from_this();
     const std::uint64_t generation = connection_generation;
@@ -269,7 +273,8 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                     disconnect();
                     return;
                 }
-                session.receive_message(std::move(message));
+                // session.receive_message(std::move(message));
+                incoming_queue.push(std::move(message));
                 break;
             }
             case MessageType::SYNC_RESPONSE: {
@@ -278,15 +283,8 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                     disconnect();
                     return;
                 }
-                const auto& history = std::get<std::vector<Operation>>(message.get_payload());
-                session.apply_history(history);
 
-                set_state(NetworkClientState::LIVE);
-                //state = NetworkClientState::LIVE;
-
-                Message complete(MessageType::SYNC_COMPLETE, client_id, std::monostate{});
-                send_message(complete.serialize());
-                send_cursor_update(session.get_cursor().get_anchor());
+                incoming_queue.push(std::move(message));
                 break;
             }
             case MessageType::HELLO: {
@@ -318,8 +316,9 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
                     disconnect();
                     return;
                 }
-                const auto& update = std::get<CursorUpdate>(message.get_payload());
-                session.receive_cursor_update(message.get_sender(), update.position);
+                // const auto& update = std::get<CursorUpdate>(message.get_payload());
+                // session.receive_cursor_update(message.get_sender(), update.position);
+                incoming_queue.push(std::move(message));
                 break;
             }
             default: {
@@ -333,4 +332,21 @@ void NetworkClient::handle_message(const std::string& serialized_message) {
         std::cerr << "Invalid message from server: " << e.what() << std::endl;
         disconnect();
     }
+}
+
+void NetworkClient::notify_outgoing() {
+    auto self = shared_from_this();
+
+    boost::asio::post(io, [self]() {
+        self->process_outgoing();
+    });
+}
+
+
+void NetworkClient::process_outgoing() {
+    auto messages = outgoing_queue.take_all();
+    for (auto& message : messages) {
+        send_message_impl(message.serialize());
+    }
+
 }

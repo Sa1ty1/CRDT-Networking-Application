@@ -8,6 +8,7 @@
 #include <network/editor_session.hpp>
 #include <network/framing.hpp>
 #include <persistance/document_id.hpp>
+#include <util/thread_safe_queue.hpp>
 
 
 enum class NetworkClientState {
@@ -27,25 +28,18 @@ public:
 
     using tcp = boost::asio::ip::tcp;
 
-    NetworkClient(boost::asio::io_context& io, EditorSession& session, std::string client_id);
+    // NetworkClient(boost::asio::io_context& io, EditorSession& session, std::string client_id);
+    NetworkClient(boost::asio::io_context& io, std::string client_id,  ThreadSafeQueue<Message>& incoming_queue, ThreadSafeQueue<Message>& outgoing_queue);
 
     NetworkClientState get_state() const;
 
     void connect(const std::string& host, unsigned short port);
 
-    void send_hello();
-
-    void send_message(std::string message);
-
     tcp::socket& socket();
 
     void close_socket();
 
-    void send_outgoing_operations();
-
     void disconnect();
-
-    void send_cursor_update(const ElementID& position);
 
     void poll();
 
@@ -53,7 +47,16 @@ public:
 
     void set_state_change_callback(StateChangeCallback callback);
 
+    void notify_outgoing();
+
 private:
+
+    void connect_impl(const std::string& host, unsigned short port);
+    void send_message_impl(std::string message);
+    void send_open_document_impl(const DocumentID& document_id);
+    void disconnect_impl();
+
+    void send_hello();
 
     void set_state(NetworkClientState new_state);
 
@@ -63,10 +66,12 @@ private:
 
     void handle_message(const std::string& serialized_message);
 
+    void process_outgoing();
+
 private:
+
     tcp::socket network_socket;
     std::string client_id;
-    EditorSession& session;
     boost::asio::io_context& io;
     std::array<char, framing::HEADER_SIZE> read_header_buffer;
     std::vector<char> read_body_buffer;
@@ -74,4 +79,6 @@ private:
     std::uint64_t connection_generation = 0;
     NetworkClientState state = NetworkClientState::DISCONNECTED;
     StateChangeCallback state_change_callback;
+    ThreadSafeQueue<Message>& incoming_queue;
+    ThreadSafeQueue<Message>& outgoing_queue;
 };

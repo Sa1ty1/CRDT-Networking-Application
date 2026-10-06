@@ -16,22 +16,9 @@
 
 // manual experimentation
 // debugging
-// #include <chrono>
-// #include <stdio.h>
 #include <iostream>
 #include <QApplication>
-// #include <random>
-// #include <boost/asio.hpp>
-// #include <cstdint>
-// #include <cstring>
-// #include <iostream>
-// #include <src/document.hpp>
-// #include <editor/input_handler.hpp>
-// #include <src/operation_log.hpp>
-// #include <network/server.hpp>
-// #include <network/editor_session.hpp>
-// #include <network/fake_network.hpp>
-// #include <network/network_client.hpp>
+#include <thread>
 #include <tests/networking_tests.hpp>
 #include <tests/persistance_tests.hpp>
 #include <tests/UI_tests.hpp>
@@ -41,6 +28,9 @@
 
 int main(int argc, char* argv[]) {
     boost::asio::io_context io;
+
+    // keep io.run() alive even  when there aren't currently any asynchronous operations
+    auto work_guard = boost::asio::make_work_guard(io);
 
     QApplication app(argc, argv); 
 
@@ -52,11 +42,16 @@ int main(int argc, char* argv[]) {
     InputHandler handler_a(document_a, cursor_a, generator_a);
     OperationLog log_a;
 
-    EditorSession session_a(document_a, cursor_a, handler_a, log_a, generator_a);
+    ThreadSafeQueue<Message> incoming_a;
+    ThreadSafeQueue<Message> outgoing_a;
 
-    auto network_a = std::make_shared<NetworkClient>(io, session_a, "client_a");
+    auto network_a = std::make_shared<NetworkClient>(io, "client_a", incoming_a, outgoing_a);
 
-    EditorWidget editor_a(session_a, *network_a);
+    EditorSession session_a(document_a, cursor_a, handler_a, log_a, generator_a, "client_a", incoming_a, outgoing_a, [network_a]() {network_a->notify_outgoing();});
+
+    // auto network_a = std::make_shared<NetworkClient>(io, session_a, "client_a");
+
+    EditorWidget editor_a(session_a);//  *network_a);
 
     Document document_b;
     Cursor cursor_b(ROOT_ID);
@@ -64,11 +59,16 @@ int main(int argc, char* argv[]) {
     InputHandler handler_b(document_b, cursor_b, generator_b);
     OperationLog log_b;
 
-    EditorSession session_b(document_b, cursor_b, handler_b, log_b, generator_b);
+    ThreadSafeQueue<Message> incoming_b;
+    ThreadSafeQueue<Message> outgoing_b;
 
-    auto network_b = std::make_shared<NetworkClient>(io, session_b, "client_b");
+    auto network_b = std::make_shared<NetworkClient>(io, "client_b", incoming_b, outgoing_b);
 
-    EditorWidget editor_b(session_b, *network_b);
+    EditorSession session_b(document_b, cursor_b, handler_b, log_b, generator_b, "client_b", incoming_b, outgoing_b, [network_b]() {network_b->notify_outgoing();});
+
+    // auto network_b = std::make_shared<NetworkClient>(io, session_b, "client_b");
+
+    EditorWidget editor_b(session_b); //, *network_b);
 
     editor_a.show();
     editor_b.show();
@@ -87,7 +87,14 @@ int main(int argc, char* argv[]) {
     network_a->connect("127.0.0.1", 12345);
     network_b->connect("127.0.0.1", 12345);
 
-    return app.exec();
+    std::thread network_thread([&io]() {
+        io.run();
+    });
+
+    int result = app.exec();
+    network_thread.join();
+
+    return result;
 }
 
 

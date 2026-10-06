@@ -7,21 +7,14 @@ void EditorSession::handle_editor_command(EditorCommand command) {
 
     for (const auto& action: actions) {
         apply_operation(action, true);
-        outgoing_queue.push(action);
+        Message message(MessageType::OPERATION, client_id, action);
+        // outgoing_queue.push(std::move(message));
+        queue_outgoing_message(message);
     }
     if (command.get_type() != MoveUp && command.get_type() != MoveDown) {
         cursor.update_desired_column(doc);
     }
     std::cout << "done\n";
-}
-
-std::vector<Operation> EditorSession::take_outgoing_operations() {
-    std::vector<Operation> opers;
-    while (!outgoing_queue.empty()) {
-        opers.emplace_back(outgoing_queue.front());
-        outgoing_queue.pop();
-    }
-    return opers;
 }
 
 void EditorSession::receive_cursor_update(const std::string& client_id, const ElementID& position) {
@@ -37,14 +30,14 @@ void EditorSession::receive_cursor_update(const std::string& client_id, const El
     pending_cursor_updates.erase(client_id);    
 }
 
-void EditorSession::receive_message(Message message) {
-    incoming_queue.push(message);        
-}
+// void EditorSession::receive_message(Message message) {
+//     incoming_queue.push(message);        
+// }
 
 void EditorSession::flush_incoming() {
-    while (!incoming_queue.empty()) {
-        apply(incoming_queue.front());
-        incoming_queue.pop();
+    auto messages = incoming_queue.take_all();
+    for (auto& message : messages) {
+        apply(std::move(message));
     }
 }
 
@@ -80,15 +73,42 @@ void EditorSession::apply(Message message) {
             update_pending_cursor_updates();
             break;
         }
-        // case MessageType::CURSOR_UPDATE: { // at some point will switch to this; not yet
-        //     const CursorUpdate& update = std::get<CursorUpdate>(message.get_payload());
+        case MessageType::SYNC_RESPONSE: {
+            const auto& history = std::get<std::vector<Operation>>(message.get_payload());
+            apply_history(history);
+            Message sync_complete(MessageType::SYNC_COMPLETE, client_id, std::monostate{});
+            // outgoing_queue.push(std::move(sync_complete));
+            queue_outgoing_message(sync_complete);
 
-        //     receive_cursor_update(message.get_sender(), update.position);
-        //     break;
-        // }
+            Message cursor_update(MessageType::CURSOR_UPDATE, client_id, CursorUpdate{cursor.get_anchor()});
+            // outgoing_queue.push(std::move(cursor_update));
+            queue_outgoing_message(cursor_update);
+
+            break;
+        }
+        case MessageType::CURSOR_UPDATE: {
+            const CursorUpdate& update = std::get<CursorUpdate>(message.get_payload());
+
+            receive_cursor_update(message.get_sender(), update.position);
+            break;
+        }
         default:
             break;
     }
+}
+
+void EditorSession::queue_outgoing_message(Message message) {
+    outgoing_queue.push(std::move(message));
+    if (outgoing_message_callback) {
+        outgoing_message_callback();
+    }
+}
+
+
+void EditorSession::queue_cursor_update() {
+    Message cursor_update(MessageType::CURSOR_UPDATE, client_id, CursorUpdate{cursor.get_anchor()});
+    // outgoing_queue.push(std::move(cursor_update));
+    queue_outgoing_message(cursor_update);
 }
 
 void EditorSession::apply_operation(const Operation& oper, bool update_cursor) {
@@ -164,4 +184,4 @@ const std::unordered_map<std::string, ElementID>& EditorSession::get_remote_curs
 }
 
 
-EditorSession::EditorSession(Document& d, Cursor& c, InputHandler& hand, OperationLog& l, Id_generator& g): doc(d), cursor(c), handler(hand), log(l), gen(g) {}
+EditorSession::EditorSession(Document& d, Cursor& c, InputHandler& hand, OperationLog& l, Id_generator& g, std::string client_id, ThreadSafeQueue<Message>& incoming_queue, ThreadSafeQueue<Message>& outgoing_queue, OutgoingMessageCallback outgoing_message_callback): doc(d), cursor(c), handler(hand), log(l), gen(g), client_id(std::move(client_id)), incoming_queue(incoming_queue), outgoing_queue(outgoing_queue), outgoing_message_callback(outgoing_message_callback) {}

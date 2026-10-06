@@ -41,6 +41,7 @@ add_executable(main
     crdt_editor/persistance/document_id.hpp
     crdt_editor/persistance/sqlite_database.cpp
     crdt_editor/util/hash.cpp
+    crdt_editor/util/thread_safe_queue.hpp
 )
 
 target_include_directories(main PRIVATE

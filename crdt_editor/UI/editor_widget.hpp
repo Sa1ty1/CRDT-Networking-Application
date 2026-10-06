@@ -25,8 +25,8 @@ struct Selection {
 
 class EditorWidget : public QWidget {
 public:
-    explicit EditorWidget(EditorSession& session, NetworkClient& network, QWidget* parent = nullptr);
-    // void set_remote_cursor(std::string client_id, ElementID position);
+    // explicit EditorWidget(EditorSession& session, NetworkClient& network, QWidget* parent = nullptr);
+    explicit EditorWidget(EditorSession& session, QWidget* parent = nullptr);
 protected:
     void keyPressEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -46,7 +46,7 @@ private:
     QTimer* network_timer;
     QTimer* cursor_blink_timer;
     bool cursor_visible = true;
-    NetworkClient& network;
+    // NetworkClient& network;
     Viewport viewport;
     bool selecting = false;
     QColor selection_color = QColor(50, 100, 180);
@@ -54,7 +54,7 @@ private:
     void draw_document(QPainter& painter, const QFontMetrics& metrics);
     void draw_local_cursor(QPainter& painter, const QFontMetrics& metrics);
     void draw_remote_cursors(QPainter& painter, const QFontMetrics& metrics);
-    void send_cursor_update();
+    // void send_cursor_update();
     void reset_cursor_blink();
     void ensure_cursor_visible();
     void clamp_viewport();

@@ -1,13 +1,13 @@
 #include <UI/editor_widget.hpp>
 
 
-EditorWidget::EditorWidget(EditorSession& session, NetworkClient& network, QWidget* parent): QWidget(parent), session(session), network(network), network_timer(new QTimer(this)), cursor_blink_timer(new QTimer(this)) {
+// EditorWidget::EditorWidget(EditorSession& session, NetworkClient& network, QWidget* parent): QWidget(parent), session(session), network(network), network_timer(new QTimer(this)), cursor_blink_timer(new QTimer(this)) {
+EditorWidget::EditorWidget(EditorSession& session, QWidget* parent): QWidget(parent), session(session), network_timer(new QTimer(this)), cursor_blink_timer(new QTimer(this)) {
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(800, 600);
     setFont(QFont("Consolas"));
 
     connect(network_timer, &QTimer::timeout, this, [this]() {
-        this->network.poll();
         this->session.flush_incoming();
         update();
     });
@@ -92,12 +92,8 @@ void EditorWidget::keyPressEvent(QKeyEvent* event) {
             break;
     }
 
-    // Send document operations before advertising the new cursor position.
-    if (network.get_state() == NetworkClientState::LIVE) {
-        network.send_outgoing_operations();
-    }
-
-    send_cursor_update();
+    session.queue_cursor_update();
+    //send_cursor_update();
     reset_cursor_blink();
     clamp_viewport();
     ensure_cursor_visible();
@@ -124,7 +120,8 @@ void EditorWidget::mousePressEvent(QMouseEvent* event) {
         cursor.set_position(*anchor, session.get_doc());
         //cursor.start_selection();
         selecting = true;
-        send_cursor_update();
+        session.queue_cursor_update();
+        //send_cursor_update();
         reset_cursor_blink();
         ensure_cursor_visible();
     }
@@ -216,12 +213,12 @@ QPoint EditorWidget::document_to_screen(size_t line, size_t column) const {
     return QPoint(x,y);
 }
 
-void EditorWidget::send_cursor_update() {
-    if (network.get_state() != NetworkClientState::LIVE) {
-        return;
-    }
-    network.send_cursor_update(session.get_cursor().get_anchor());
-}
+// void EditorWidget::send_cursor_update() {
+//     if (network.get_state() != NetworkClientState::LIVE) {
+//         return;
+//     }
+//     network.send_cursor_update(session.get_cursor().get_anchor());
+// }
 
 void EditorWidget::draw_document(QPainter& painter, const QFontMetrics& metrics) {
     int char_width = metrics.horizontalAdvance('M');

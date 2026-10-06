@@ -15,19 +15,27 @@ void FakeNetwork::register_client(std::string clientID, EditorSession& sessionID
 
 
 void FakeNetwork::collect_outgoing() {
-    for (const auto& [clientID, sessionID] : client_session_pair) {
-        std::vector<Operation> operations = sessionID->take_outgoing_operations();
-        for (int i = 0; i < operations.size(); i++) {
-            for (const auto& [cID, sID] : client_session_pair) {
-                if (cID != clientID) {
-                    Message new_message = Message(MessageType::OPERATION, cID, operations.at(i));
-                    std::string serialized_message = new_message.serialize();
-                    in_flight.push_back(PendingMessage {serialized_message, choose_delivery_tick()});
-                    //q.push(serialized_message);
-                }
-            }
-        }
-    }
+    // for (const auto& [clientID, sessionID] : client_session_pair) {
+    //     std::vector<Message> messages = sessionID->take_outgoing_messages();
+    //     for (int i = 0; i < messages.size(); i++) {
+    //         for (const auto& [cID, sID] : client_session_pair) {
+    //             if (cID != clientID) {
+    //                 in_flight.push_back(PendingMessage {messages.at(i).serialize(), choose_delivery_tick()});
+    //             }
+    //         }
+    //     }
+        // std::vector<Operation> operations = sessionID->take_outgoing_operations();
+        // for (int i = 0; i < operations.size(); i++) {
+        //     for (const auto& [cID, sID] : client_session_pair) {
+        //         if (cID != clientID) {
+        //             Message new_message = Message(MessageType::OPERATION, cID, operations.at(i));
+        //             std::string serialized_message = new_message.serialize();
+        //             in_flight.push_back(PendingMessage {serialized_message, choose_delivery_tick()});
+        //             //q.push(serialized_message);
+        //         }
+        //     }
+        // }
+    // }
 }
 
 int FakeNetwork::choose_delivery_tick() {
@@ -36,22 +44,22 @@ int FakeNetwork::choose_delivery_tick() {
 }
 
 void FakeNetwork::deliver(const std::string& sender, const std::string& mes) {
-    Message message = Message::deserialize(mes);
+    // Message message = Message::deserialize(mes);
 
-    if (message.get_type() == MessageType::OPERATION) {
+    // if (message.get_type() == MessageType::OPERATION) {
 
-        std::visit([&](const auto& op) {
-            using T = std::decay_t<decltype(op)>;
-            if constexpr (std::is_same_v<T, InsertOperation>) {
-            }
-        }, std::get<Operation>(message.get_payload()));
+    //     std::visit([&](const auto& op) {
+    //         using T = std::decay_t<decltype(op)>;
+    //         if constexpr (std::is_same_v<T, InsertOperation>) {
+    //         }
+    //     }, std::get<Operation>(message.get_payload()));
 
-        for (const auto& [client, session] : client_session_pair) {
-            if (client != sender) {
-                client_session_pair.at(client)->receive_message(message);
-            }
-        }
-    }
+    //     for (const auto& [client, session] : client_session_pair) {
+    //         if (client != sender) {
+    //             client_session_pair.at(client)->receive_message(message);
+    //         }
+    //     }
+    // }
 
 }
 
